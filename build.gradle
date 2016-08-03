@@ -1,0 +1,89 @@
+apply plugin: 'java'
+apply plugin: 'application'
+
+sourceCompatibility = 1.8
+version = '1.0'
+
+mainClassName = 'com.kynetics.sensors.SensorsApp'
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.kynetics.sensors.SensorsApp'
+    }
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+	compile 'com.google.code.gson:gson:2.2.4'
+    compile files('./misc/RXTXcomm.jar')
+}
+
+uploadArchives {
+    repositories {
+       flatDir {
+           dirs 'repos'
+       }
+    }
+}
+
+run {
+    if ( project.hasProperty("appArgs") ) {
+        args Eval.me(appArgs)
+    }
+}
+
+ext {
+    warpIp = '192.168.7.2'
+    username = 'root'
+    destDir = '~'
+    identityFile = '/Users/nik/.ssh/id_rsa'
+}
+
+task predeploy << {
+
+    def cmdStr = "ssh -i ${identityFile} ${username}@${warpIp} bash -s"
+
+    println cmdStr
+    def cmd = cmdStr.execute()
+    "echo cd /home/root; rm -rf ${project.name}-${project.version}; rm -rf ${project.name}-${project.version}.tar".execute().pipeTo(cmd)
+    cmd.waitFor()
+    /*
+    def sout = new StringBuilder(), serr = new StringBuilder()
+    cmd.consumeProcessOutput(sout,serr)
+    cmd.waitFor()
+    println "out > $sout err > $serr"
+    */
+}
+
+task deploy(type: Exec, dependsOn: [predeploy, distTar]) {
+
+    def tarPath = "$buildDir/distributions/${project.name}-${project.version}.tar"
+    commandLine 'scp',  '-i', "${identityFile}", "${tarPath}", "${username}@${warpIp}:${destDir}"
+    doLast {
+        tasks.untar.execute()
+    }
+}
+
+task untar (type: Exec, dependsOn:[deploy]){
+    commandLine 'ssh',  '-i', "${identityFile}", "${username}@${warpIp}", "tar xf ${project.name}-${project.version}.tar"
+}
+
+startScripts {
+    def oldScript = unixStartScriptGenerator.template.asString()
+    def newLines = ""
+    oldScript.readLines().eachWithIndex { l,i ->
+        if(i == 1) newLines += "\nexport DISPLAY=\\\${DISPLAY-:0}\n"
+        else newLines += l + "\n"
+    }
+
+    unixStartScriptGenerator.template = resources.text.fromString(newLines)
+    defaultJvmOpts = ["-Djava.library.path=/usr/lib/java/jni/"]
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '2.14'
+}
