@@ -1,5 +1,5 @@
 /**
- * Copyright 2014 - Kynetics, LLC
+ * Copyright 2014-2016 - Kynetics, LLC
  */
 package com.kynetics.sensors.ui;
 
